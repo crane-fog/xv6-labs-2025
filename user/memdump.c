@@ -57,9 +57,43 @@ main(int argc, char *argv[])
   exit(0);
 }
 
-void
-memdump(char *fmt, char *data)
+void memdump(char* fmt, char* data)
 {
-  // Your code here.
-
+    // Your code here.
+    for (int i = 0; fmt[i] != '\0'; i++) {
+        char c = fmt[i];
+        if (c == 'i') {
+            int* p = (int*)data;
+            printf("%d\n", *p);
+            data += sizeof(int);
+        }
+        else if (c == 'p') {
+            unsigned long long* p = (unsigned long long*)data;
+            printf("%llx\n", *p);
+            data += sizeof(void*);
+        }
+        else if (c == 'h') {
+            short* p = (short*)data;
+            printf("%d\n", *p);
+            data += sizeof(short);
+        }
+        else if (c == 'c') {
+            char* p = (char*)data;
+            printf("%c\n", *p);
+            data += sizeof(char);
+        }
+        else if (c == 's') {
+            char** p = (char**)data;
+            printf("%s\n", *p);
+            data += sizeof(char*);
+        }
+        else if (c == 'S') {
+            char* s = (char*)data;
+            printf("%s\n", s);
+            data += strlen(s) + 1;
+        }
+        else {
+            printf("Unknown format specifier: %c\n", c);
+        }
+    }
 }
