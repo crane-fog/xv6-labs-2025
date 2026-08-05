@@ -3,10 +3,17 @@
 #include "user/user.h"
 #include "kernel/riscv.h"
 
-int
-main(int argc, char *argv[])
-{
-  // Your code here.
+#define DATASIZE (8 * 4096)
 
-  exit(1);
+int main(int argc, char* argv[])
+{
+    // Your code here.
+    char* data = sbrk(DATASIZE);
+    if (data[29] == '.') {
+        printf("%s\n", data + 32);
+        return 0;
+    }
+    else {
+        return 1;
+    }
 }

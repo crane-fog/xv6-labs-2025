@@ -1,0 +1,11 @@
+kernel/trap.c:68 的 usertrap() 函数调用了 syscall()
+
+p->trapframe->a7 的值是 0xf 即十进制 15，它是 SYS_open 的系统调用号
+
+sstatus 的第 8 位表示先前的特权级别，0x200000022 第 8 位是 0，表示先前的特权级别是用户态
+
+内核崩溃的汇编指令为 lw	a3,0(zero)，变量 num 对应于 a3 寄存器
+
+内核崩溃是因为尝试解引用空指针 (int *) 0，虚拟地址 0x0 没有被映射，scause=0xd 即十进制 13 表示 Load page fault
+
+内核崩溃时正在运行的进程名是 init，pid 为 1

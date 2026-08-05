@@ -104,4 +104,6 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  int interpose_mask;          // Mask of the process to interpose
+  char interpose_buffer[MAXPATH]; // Buffer to store the interposed path
 };
