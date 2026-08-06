@@ -363,7 +363,8 @@ typedef uint64 *pagetable_t; // 512 PTEs
 #ifdef LAB_PGTBL
 #define SUPERPGSIZE (2 * (1 << 20)) // bytes per page
 #define SUPERPGROUNDUP(sz)  (((sz)+SUPERPGSIZE-1) & ~(SUPERPGSIZE-1))
-#define SUPERPGROUNDDOWN(sz) (SUPERPGROUNDUP(sz)-SUPERPGSIZE)
+#define SUPERPGROUNDDOWN(sz) (SUPERPGROUNDUP(sz) - SUPERPGSIZE)
+#define SUPERPGNUM 16
 #endif
 
 #define PGROUNDUP(sz)  (((sz)+PGSIZE-1) & ~(PGSIZE-1))

@@ -1,0 +1,19 @@
+va 0x0 pte 0x21FC885B pa 0x87F22000 perm 0x5B
+代码段，权限为 AUXRV，已访问过，用户态可访问，可执行，可读，有效
+va 0x1000 pte 0x21FC7C5B pa 0x87F1F000 perm 0x5B
+代码段，权限为 AUXRV，已访问过，用户态可访问，可执行，可读，有效
+va 0x2000 pte 0x21FC7817 pa 0x87F1E000 perm 0x17
+数据段，权限为 UWRV，用户态可访问，可写，可读，有效
+va 0x3000 pte 0x21FC7407 pa 0x87F1D000 perm 0x7
+保护页，权限为 WRV，可写，可读，有效
+va 0x4000 pte 0x21FC70D7 pa 0x87F1C000 perm 0xD7
+用户栈，权限为 DAUWRV，已写入过，已访问过，用户态可访问，可写，可读，有效
+（中间大量 0x0 为未映射页）
+va 0x3FFFFFE000 pte 0x21FD08C7 pa 0x87F42000 perm 0xC7
+陷阱帧，权限为 DAWRV，已写入过，已访问过，可写，可读，有效
+va 0x3FFFFFF000 pte 0x2000184B pa 0x80006000 perm 0x4B
+蹦床页，权限为 AXRV，已访问过，可执行，可读，有效
+
+除 getpid() 外，uptime() 也可用共享页加速，它返回内核的 ticks 计数，若内核在时钟中断时把最新 ticks 写入共享页，用户态直接读取即可，无需系统调用。
+
+vmprint 输出叶子页与 print_pgtbl 的关系：两者查看同一进程页表，print_pgtbl 只平铺打印前 10 与后 10 个页的叶子 PTE，vmprint 递归打印整棵树（含中间页表项）。相同虚拟地址的叶子项内容一致，权限位差异仅因执行时机不同。

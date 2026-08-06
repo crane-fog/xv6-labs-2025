@@ -18,16 +18,31 @@ struct run {
   struct run *next;
 };
 
+struct run_super {
+    struct run_super* next;
+};
+
 struct {
   struct spinlock lock;
   struct run *freelist;
 } kmem;
 
+struct {
+    struct spinlock lock;
+    struct run_super* freelist;
+} super_kmem;
+
+#define SUPERPGSTART (PHYSTOP - SUPERPGNUM * SUPERPGSIZE)
+
 void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)PHYSTOP);
+  freerange(end, (void*)SUPERPGSTART);
+  initlock(&super_kmem.lock, "super_kmem");
+  for (uint64 p = SUPERPGSTART; p < PHYSTOP; p += SUPERPGSIZE) {
+      superfree((void*)p);
+  }
 }
 
 void
@@ -37,6 +52,34 @@ freerange(void *pa_start, void *pa_end)
   p = (char*)PGROUNDUP((uint64)pa_start);
   for(; p + PGSIZE <= (char*)pa_end; p += PGSIZE)
     kfree(p);
+}
+
+void superfree(void* pa)
+{
+    if (((uint64)pa % SUPERPGSIZE) != 0 || (char*)pa < end || (uint64)pa >= PHYSTOP) {
+        panic("superfree: not aligned or out of range");
+    }
+
+    memset(pa, 1, SUPERPGSIZE);
+    struct run_super* r = (struct run_super*)pa;
+    acquire(&super_kmem.lock);
+    r->next = super_kmem.freelist;
+    super_kmem.freelist = r;
+    release(&super_kmem.lock);
+}
+
+void* superalloc(void)
+{
+    acquire(&super_kmem.lock);
+    struct run_super* r = super_kmem.freelist;
+    if (r) {
+        super_kmem.freelist = r->next;
+    }
+    release(&super_kmem.lock);
+    if (r) {
+        memset((char*)r, 0, SUPERPGSIZE);
+    }
+    return (void*)r;
 }
 
 // Free the page of physical memory pointed at by pa,
