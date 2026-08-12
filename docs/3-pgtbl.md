@@ -351,7 +351,7 @@ void demote_superpage(pagetable_t pagetable, uint64 va)
 }
 ```
 
-`superpg_fork` 验证 `sbrk(16MB)` 后父进程地址空间中连续 512 页共享同一条超页 PTE、fork 后子进程同样持有超页、`sbrk(-SZ)` 释放后子进程访问已释放内存会被缺页杀死；`superpg_free` 验证 `sbrk(-PGSIZE)` 部分释放超页后其余内容保留、剩余页仍为超页映射、fork 出的子进程不能访问父进程已释放的页。
+`superpg_fork` 验证 `sbrk(16MB)` 后父进程地址空间中连续 512 页共享同一条超页 PTE、fork 后子进程同样持有超页、`sbrk(-SZ)` 释放后子进程访问已释放内存会被缺页 kill；`superpg_free` 验证 `sbrk(-PGSIZE)` 部分释放超页后其余内容保留、剩余页仍为超页映射、fork 出的子进程不能访问父进程已释放的页。
 
 在 xv6 shell 中执行 `pgtbltest`。
 
