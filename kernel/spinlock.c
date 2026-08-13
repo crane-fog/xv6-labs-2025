@@ -121,32 +121,51 @@ release(struct spinlock *lk)
 }
 
 #ifdef LAB_LOCK
-static void
-read_acquire_inner(struct rwspinlock *rwlk)
+static void read_acquire_inner(struct rwspinlock* rwlk)
 {
-  // Replace this with your implementation.
-  acquire(&rwlk->l);
+    while (1) {
+        if (__atomic_load_n(&rwlk->waiting_writers, __ATOMIC_SEQ_CST) > 0) {
+            continue;
+        }
+
+        acquire(&rwlk->lk);
+        if (rwlk->has_writer == 0 && __atomic_load_n(&rwlk->waiting_writers, __ATOMIC_SEQ_CST) == 0) {
+            rwlk->reader_count++;
+            release(&rwlk->lk);
+            break;
+        }
+        release(&rwlk->lk);
+    }
 }
 
-static void
-read_release_inner(struct rwspinlock *rwlk)
+static void read_release_inner(struct rwspinlock* rwlk)
 {
-  // Replace this with your implementation.
-  release(&rwlk->l);
+    acquire(&rwlk->lk);
+    rwlk->reader_count--;
+    release(&rwlk->lk);
 }
 
-static void
-write_acquire_inner(struct rwspinlock *rwlk)
+static void write_acquire_inner(struct rwspinlock* rwlk)
 {
-  // Replace this with your implementation.
-  acquire(&rwlk->l);
+    __atomic_fetch_add(&rwlk->waiting_writers, 1, __ATOMIC_SEQ_CST);
+
+    while (1) {
+        acquire(&rwlk->lk);
+        if (rwlk->reader_count == 0 && rwlk->has_writer == 0) {
+            __atomic_fetch_sub(&rwlk->waiting_writers, 1, __ATOMIC_SEQ_CST);
+            rwlk->has_writer = 1;
+            release(&rwlk->lk);
+            break;
+        }
+        release(&rwlk->lk);
+    }
 }
 
-static void
-write_release_inner(struct rwspinlock *rwlk)
+static void write_release_inner(struct rwspinlock* rwlk)
 {
-  // Replace this with your implementation.
-  release(&rwlk->l);
+    acquire(&rwlk->lk);
+    rwlk->has_writer = 0;
+    release(&rwlk->lk);
 }
 
 void
@@ -177,11 +196,13 @@ write_release(struct rwspinlock *rwlk)
   pop_off();
 }
 
-void
-initrwlock(struct rwspinlock *rwlk)
+void initrwlock(struct rwspinlock* rwlk)
 {
-  // Replace this with your implementation.
-  initlock(&rwlk->l, "rwlk");
+    // Replace this with your implementation.
+    initlock(&rwlk->lk, "rwlock");
+    rwlk->reader_count = 0;
+    rwlk->has_writer = 0;
+    rwlk->waiting_writers = 0;
 }
 
 // Test rwspinlock implementation.
