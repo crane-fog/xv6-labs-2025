@@ -439,6 +439,33 @@ bmap(struct inode *ip, uint bn)
     brelse(bp);
     return addr;
   }
+  bn -= NINDIRECT;
+
+  if (bn < NININDIRECT) {
+      if ((addr = ip->addrs[NDIRECT + 1]) == 0) {
+          ip->addrs[NDIRECT + 1] = addr = balloc(ip->dev);
+      }
+      bp = bread(ip->dev, addr);
+      a = (uint*)bp->data;
+
+      uint idx1 = bn / NINDIRECT;
+      uint idx2 = bn % NINDIRECT;
+      uint sub_addr;
+      if ((sub_addr = a[idx1]) == 0) {
+          a[idx1] = sub_addr = balloc(ip->dev);
+          log_write(bp);
+      }
+      brelse(bp);
+
+      struct buf* sub_bp = bread(ip->dev, sub_addr);
+      uint* sub_a = (uint*)sub_bp->data;
+      if ((addr = sub_a[idx2]) == 0) {
+          sub_a[idx2] = addr = balloc(ip->dev);
+          log_write(sub_bp);
+      }
+      brelse(sub_bp);
+      return addr;
+  }
 
   panic("bmap: out of range");
 }
@@ -469,6 +496,27 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if (ip->addrs[NDIRECT + 1]) {
+      bp = bread(ip->dev, ip->addrs[NDIRECT + 1]);
+      a = (uint*)bp->data;
+      for (i = 0; i < NINDIRECT; i++) {
+          if (a[i]) {
+              struct buf* sub_bp = bread(ip->dev, a[i]);
+              uint* sub_a = (uint*)sub_bp->data;
+              for (j = 0; j < NINDIRECT; j++) {
+                  if (sub_a[j]) {
+                      bfree(ip->dev, sub_a[j]);
+                  }
+              }
+              brelse(sub_bp);
+              bfree(ip->dev, a[i]);
+          }
+      }
+      brelse(bp);
+      bfree(ip->dev, ip->addrs[NDIRECT + 1]);
+      ip->addrs[NDIRECT + 1] = 0;
   }
 
   ip->size = 0;
