@@ -146,6 +146,10 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  for (int i = 0; i < NVMA; i++) {
+      p->vmas[i].used = 0;
+  }
+
   return p;
 }
 
@@ -265,6 +269,25 @@ kfork(void)
     return -1;
   }
 
+  for (int i = 0; i < NVMA; i++) {
+      if (p->vmas[i].used) {
+          np->vmas[i] = p->vmas[i];
+          filedup(p->vmas[i].f);
+
+          for (uint64 va = p->vmas[i].addr; va < p->vmas[i].addr + p->vmas[i].length; va += PGSIZE) {
+              pte_t* pte = walk(p->pagetable, va, 0);
+              if (pte && (*pte & PTE_V)) {
+                  char* mem = kalloc();
+                  if (mem) {
+                      memmove(mem, (char*)PTE2PA(*pte), PGSIZE);
+                      int flags = PTE_FLAGS(*pte);
+                      mappages(np->pagetable, va, PGSIZE, (uint64)mem, flags);
+                  }
+              }
+          }
+      }
+  }
+
   // Copy user memory from parent to child.
   if(uvmcopy(p->pagetable, np->pagetable, p->sz) < 0){
     freeproc(np);
@@ -327,6 +350,12 @@ kexit(int status)
 
   if(p == initproc)
     panic("init exiting");
+
+  for (int i = 0; i < NVMA; i++) {
+      if (p->vmas[i].used) {
+          vma_unmap(p, &p->vmas[i], p->vmas[i].addr, p->vmas[i].length);
+      }
+  }
 
   // Close all open files.
   for(int fd = 0; fd < NOFILE; fd++){

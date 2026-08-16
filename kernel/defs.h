@@ -242,3 +242,7 @@ void            netinit(void);
 void            net_rx(char *buf, int len);
 
 #endif
+
+struct vma;
+// sysfile.c
+int vma_unmap(struct proc*, struct vma*, uint64, uint64);

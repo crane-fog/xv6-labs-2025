@@ -5,6 +5,10 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "fcntl.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -27,6 +31,56 @@ void
 trapinithart(void)
 {
   w_stvec((uint64)kernelvec);
+}
+
+int mmap_fault(struct proc* p, uint64 va, uint64 scause)
+{
+    struct vma* v = 0;
+
+    for (int i = 0; i < NVMA; i++) {
+        if (p->vmas[i].used && va >= p->vmas[i].addr && va < p->vmas[i].addr + p->vmas[i].length) {
+            v = &p->vmas[i];
+            break;
+        }
+    }
+    if (v == 0 || (scause == 15 && !(v->prot & PROT_WRITE))) {
+        return -1;
+    }
+
+    char* mem = kalloc();
+    if (mem == 0) {
+        return -1;
+    }
+    memset(mem, 0, PGSIZE);
+
+    uint64 page_va = PGROUNDDOWN(va);
+    uint64 offset = (page_va - v->addr) + v->offset;
+    int read_len = PGSIZE;
+    if (v->addr + v->length - page_va < PGSIZE) {
+        read_len = v->addr + v->length - page_va;
+    }
+
+    ilock(v->f->ip);
+    readi(v->f->ip, 0, (uint64)mem, offset, read_len);
+    iunlock(v->f->ip);
+
+    int pte_flags = PTE_U;
+    if (v->prot & PROT_READ) {
+        pte_flags |= PTE_R;
+    }
+    if (v->prot & PROT_WRITE) {
+        pte_flags |= PTE_W;
+    }
+    if (v->prot & PROT_EXEC) {
+        pte_flags |= PTE_X;
+    }
+
+    if (mappages(p->pagetable, page_va, PGSIZE, (uint64)mem, pte_flags) != 0) {
+        kfree(mem);
+        return -1;
+    }
+
+    return 0;
 }
 
 //
@@ -68,13 +122,16 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
-  } else if((r_scause() == 15 || r_scause() == 13) &&
-            vmfault(p->pagetable, r_stval(), (r_scause() == 13)? 1 : 0) != 0) {
-    // page fault on lazily-allocated page
-  } else {
-    printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
-    printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
-    setkilled(p);
+  }
+  else if ((r_scause() == 15 || r_scause() == 13) &&
+           (mmap_fault(p, r_stval(), r_scause()) == 0 ||
+            vmfault(p->pagetable, r_stval(), (r_scause() == 13) ? 1 : 0) != 0)) {
+      // page fault on lazily-allocated page
+  }
+  else {
+      printf("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
+      printf("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
+      setkilled(p);
   }
 
   if(killed(p))
