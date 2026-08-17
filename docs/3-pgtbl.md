@@ -361,6 +361,4 @@ void demote_superpage(pagetable_t pagetable, uint64 va)
 
 实现过程中排查了三个问题：初期启动即 `panic: freewalk: leaf`，原因是 `uvmcopy()` 用 R/W/X 判断超页，而普通叶子页同样带 R/W/X，被误当成 2MB 超页复制，导致 fork 出的子进程页表损坏，改为判断 PTE 是否位于 level-1 后解决。随后 `superpg_fork` 报 `pte wrong`，是 `uvmalloc()` 的超页分支只传了 `PTE_W`，超页 PTE 缺少 `PTE_R`，补上 `PTE_R | PTE_U` 后通过。最后 fork 失败，原因是一开始设置的 `#define SUPERPGNUM 8` 不足以同时满足父进程与 fork 复制后的子进程（各占 7 个超页），调整为 16 后通过。
 
-## 评分
-
 ![alt text](pics/3.5.1.png)

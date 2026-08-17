@@ -223,6 +223,4 @@ static void write_release_inner(struct rwspinlock* rwlk)
 
 一开始的实现是让内部自旋锁保护 `reader_count`、`has_writer`、`waiting_writers` 全部三个字段，但发现无法通过 `rwlktest`。原因是 xv6 的自旋锁是不公平的：等待中的写者并不比后续到达的读者更有机会获得锁，读者仍可能在写者之前插队，写者可能迟迟拿不到锁。后来修改为 `waiting_writers` 不由自旋锁保护，而是借助 GCC 的 `__atomic_*` 内建函数（如 `__atomic_fetch_add`、`__atomic_load_n`）保证其读写原子性，让写者在不争抢锁的情况下表示写意图。
 
-## 评分
-
 ![alt text](pics/7.3.1.png)

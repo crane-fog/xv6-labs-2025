@@ -216,6 +216,4 @@ int copyout(pagetable_t pagetable, uint64 dstva, char* src, uint64 len)
 
 “任何计算机系统问题都可以通过增加一个抽象层来解决”，操作系统利用页表这一抽象，给用户进程透明地提供了连续的虚拟地址空间，写时复制 fork 进一步利用页表抽象实现了父子进程共享物理页的功能。
 
-## 评分
-
 ![alt text](pics/5.2.1.png)

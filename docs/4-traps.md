@@ -204,6 +204,4 @@ if (which_dev == 2) {
 
 注意到 `saved_trapframe` 与 `trapframe` 都是指针变量，此处直接赋值只是让它们指向同一块内存，没有起到保存现场的作用。正确的做法是将 `trapframe` 的内容整体拷贝到 `saved_trapframe` 所指向的内存中，即 `*p->saved_trapframe = *p->trapframe;`。
 
-## 评分
-
 ![alt text](pics/4.4.1.png)

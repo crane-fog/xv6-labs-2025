@@ -351,7 +351,5 @@ if (strcmp(fmtname(path), filename) == 0) {
 
 本题未遇到问题。
 
-## 评分
-
 ![alt text](pics/1.7.1.png)
 ![alt text](pics/1.7.2.png)

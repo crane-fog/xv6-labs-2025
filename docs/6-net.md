@@ -242,6 +242,4 @@ uint64 sys_recv(void)
 
 本题未遇到问题。
 
-## 评分
-
 ![alt text](pics/6.3.1.png)

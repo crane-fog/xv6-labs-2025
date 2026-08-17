@@ -265,7 +265,5 @@ int main(int argc, char* argv[])
 
 一些不直接影响程序正确性的漏洞有时也会被利用来破坏安全性，看似无害的边界处理往往是安全漏洞的根源。
 
-## 评分
-
 ![alt text](pics/2.5.1.png)
 ![alt text](pics/2.5.2.png)

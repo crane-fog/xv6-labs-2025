@@ -247,6 +247,4 @@ for (int i = 0; i < NVMA; i++) {
 
 最初 `vma_unmap` 中的写回长度只按 VMA 剩余长度截断，没有按文件大小截断，而 xv6 的 `writei()` 写到文件末尾之外时会把文件自动扩展，于是第 1 页整页 4096 字节都被写回，文件被撑到 8192 字节，第二次 `read` 返回了 4096 而不是期望的 2048，导致 `dirty read #2`。修复方式是在 `ilock` 之后读取 `ip->size`，把写回长度截断为 `ip->size - offset`。
 
-## 评分
-
 ![alt text](pics/9.2.1.png)

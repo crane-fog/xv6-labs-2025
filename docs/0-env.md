@@ -24,3 +24,9 @@ git clone git://g.csail.mit.edu/xv6-labs-2025
 
 > 个人代码仓库
 > https://github.com/crane-fog/xv6-labs-2025
+
+鉴于 xv6 lab 的项目组织方式，完成实验过程中使用 git worktree 模式来管理不同实验的代码。
+
+```bash
+git worktree add ../util util
+```

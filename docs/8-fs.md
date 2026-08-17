@@ -199,6 +199,4 @@ uint64 sys_symlink(void)
 - `iunlockput(struct inode *ip)`
   释放 ip 的睡眠锁，并将引用计数减 1。如果引用计数降为 0 且链接数为 0，则彻底回收该 inode 及其占用的磁盘数据块。
 
-## 评分
-
 ![alt text](pics/8.3.1.png)
