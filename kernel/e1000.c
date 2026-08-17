@@ -16,7 +16,8 @@ static struct rx_desc rx_ring[RX_RING_SIZE] __attribute__((aligned(16)));
 // remember where the e1000's registers live.
 static volatile uint32 *regs;
 
-struct spinlock e1000_lock;
+struct spinlock e1000_rx_lock;
+struct spinlock e1000_tx_lock;
 
 // called by pci_init().
 // xregs is the memory address at which the
@@ -28,7 +29,8 @@ e1000_init(uint32 *xregs)
 {
   int i;
 
-  initlock(&e1000_lock, "e1000");
+  initlock(&e1000_rx_lock, "e1000_rx");
+  initlock(&e1000_tx_lock, "e1000_tx");
 
   regs = xregs;
 
@@ -90,44 +92,76 @@ e1000_init(uint32 *xregs)
   regs[E1000_IMS] = (1 << 7); // RXDW -- Receiver Descriptor Write Back
 }
 
-int
-e1000_transmit(char *buf, int len)
+int e1000_transmit(char* buf, int len)
 {
-  //
-  // Your code here.
-  //
-  // buf contains an ethernet frame; program it into
-  // the TX descriptor ring so that the e1000 sends it. Stash
-  // a pointer so that it can be freed after send completes.
-  //
-  // return 0 on success.
-  // return -1 on failure (e.g., there is no descriptor available)
-  // so that the caller knows to free buf.
-  //
+    //
+    // Your code here.
+    //
+    // buf contains an ethernet frame; program it into
+    // the TX descriptor ring so that the e1000 sends it. Stash
+    // a pointer so that it can be freed after send completes.
+    //
+    // return 0 on success.
+    // return -1 on failure (e.g., there is no descriptor available)
+    // so that the caller knows to free buf.
+    //
 
-  
-  return 0;
+    acquire(&e1000_tx_lock);
+    uint32 idx = regs[E1000_TDT];
+    struct tx_desc* desc = &tx_ring[idx];
+    if (!(desc->status & E1000_TXD_STAT_DD)) {
+        release(&e1000_tx_lock);
+        return -1;
+    }
+    if (desc->addr) {
+        kfree((void*)desc->addr);
+    }
+    desc->addr = (uint64)buf;
+    desc->length = len;
+    desc->cso = 0;
+    desc->cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS;
+    desc->status = 0;
+    desc->css = 0;
+    desc->special = 0;
+
+    regs[E1000_TDT] = (idx + 1) % TX_RING_SIZE;
+    release(&e1000_tx_lock);
+    return 0;
 }
 
-static void
-e1000_recv(void)
+static void e1000_recv(void)
 {
-  //
-  // Your code here.
-  //
-  // Check for packets that have arrived from the e1000
-  // Create and deliver a buf for each packet (using net_rx()).
-  //
-
+    //
+    // Your code here.
+    //
+    // Check for packets that have arrived from the e1000
+    // Create and deliver a buf for each packet (using net_rx()).
+    //
+    acquire(&e1000_rx_lock);
+    while (1) {
+        uint32 idx = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+        struct rx_desc* desc = &rx_ring[idx];
+        if (!(desc->status & E1000_RXD_STAT_DD)) {
+            break;
+        }
+        net_rx((char*)desc->addr, desc->length);
+        desc->addr = (uint64)kalloc();
+        if (!desc->addr) {
+            release(&e1000_rx_lock);
+            panic("e1000: kalloc failed");
+        }
+        desc->status = 0;
+        regs[E1000_RDT] = idx;
+    }
+    release(&e1000_rx_lock);
 }
 
-void
-e1000_intr(void)
+void e1000_intr(void)
 {
-  // tell the e1000 we've seen this interrupt;
-  // without this the e1000 won't raise any
-  // further interrupts.
-  regs[E1000_ICR] = 0xffffffff;
+    // tell the e1000 we've seen this interrupt;
+    // without this the e1000 won't raise any
+    // further interrupts.
+    regs[E1000_ICR] = 0xffffffff;
 
-  e1000_recv();
+    e1000_recv();
 }

@@ -19,26 +19,65 @@ static uint8 host_mac[ETHADDR_LEN] = { 0x52, 0x55, 0x0a, 0x00, 0x02, 0x02 };
 
 static struct spinlock netlock;
 
-void
-netinit(void)
-{
-  initlock(&netlock, "netlock");
-}
+#define MAX_BINDINGS 32
 
+struct port_binding {
+    struct spinlock lock;
+    int is_bound;
+    uint16 port;
+    char* queue[16];
+    int head;
+    int tail;
+};
+
+struct port_binding bindings[MAX_BINDINGS];
+
+void netinit(void)
+{
+    initlock(&netlock, "netlock");
+    for (int i = 0; i < MAX_BINDINGS; i++) {
+        initlock(&(bindings[i].lock), "port_binding");
+    }
+}
 
 //
 // bind(int port)
 // prepare to receive UDP packets address to the port,
 // i.e. allocate any queues &c needed.
 //
-uint64
-sys_bind(void)
+uint64 sys_bind(void)
 {
-  //
-  // Your code here.
-  //
+    //
+    // Your code here.
+    //
 
-  return -1;
+    int temp;
+    argint(0, &temp);
+    acquire(&netlock);
+    for (int i = 0; i < MAX_BINDINGS; i++) {
+        acquire(&(bindings[i].lock));
+        if (bindings[i].port == (uint16)temp && bindings[i].is_bound) {
+            release(&(bindings[i].lock));
+            release(&netlock);
+            return -1;
+        }
+        release(&(bindings[i].lock));
+    }
+    for (int i = 0; i < MAX_BINDINGS; i++) {
+        acquire(&(bindings[i].lock));
+        if (!bindings[i].is_bound) {
+            bindings[i].is_bound = 1;
+            bindings[i].port = (uint16)temp;
+            bindings[i].head = 0;
+            bindings[i].tail = 0;
+            release(&(bindings[i].lock));
+            release(&netlock);
+            return 0;
+        }
+        release(&(bindings[i].lock));
+    }
+    release(&netlock);
+    return -1;
 }
 
 //
@@ -71,13 +110,64 @@ sys_unbind(void)
 // dport, *src, and *sport are host byte order.
 // bind(dport) must previously have been called.
 //
-uint64
-sys_recv(void)
+uint64 sys_recv(void)
 {
-  //
-  // Your code here.
-  //
-  return -1;
+    //
+    // Your code here.
+    //
+
+    int dport;
+    int* src;
+    short* sport;
+    char* buf;
+    int maxlen;
+    argint(0, &dport);
+    argaddr(1, (uint64*)&src);
+    argaddr(2, (uint64*)&sport);
+    argaddr(3, (uint64*)&buf);
+    argint(4, &maxlen);
+
+    struct port_binding* binding = 0;
+    for (int i = 0; i < MAX_BINDINGS; i++) {
+        acquire(&(bindings[i].lock));
+        if (bindings[i].is_bound && bindings[i].port == (uint16)dport) {
+            binding = &bindings[i];
+            break;
+        }
+        release(&(bindings[i].lock));
+    }
+    if (binding == 0) {
+        return -1;
+    }
+
+    while (binding->head == binding->tail) {
+        sleep(binding, &(binding->lock));
+    }
+
+    struct ip* ip = (struct ip*)(binding->queue[binding->head] + sizeof(struct eth));
+    struct udp* udp = (struct udp*)((char*)ip + sizeof(struct ip));
+    int payload_len = ntohs(udp->ulen) - sizeof(struct udp);
+    if (payload_len < 0) {
+        kfree(binding->queue[binding->head]);
+        binding->head = (binding->head + 1) % 16;
+        release(&(binding->lock));
+        return -1;
+    }
+    int copy_len = payload_len < maxlen ? payload_len : maxlen;
+    uint32 ip_src = ntohl(ip->ip_src);
+    uint16 udp_sport = ntohs(udp->sport);
+    if (copyout(myproc()->pagetable, (uint64)src, (char*)&ip_src, sizeof(uint32)) < 0 ||
+        copyout(myproc()->pagetable, (uint64)sport, (char*)&udp_sport, sizeof(uint16)) < 0 ||
+        copyout(myproc()->pagetable, (uint64)buf, (char*)(udp + 1), copy_len) < 0) {
+        kfree(binding->queue[binding->head]);
+        binding->head = (binding->head + 1) % 16;
+        release(&(binding->lock));
+        return -1;
+    }
+    kfree(binding->queue[binding->head]);
+    binding->head = (binding->head + 1) % 16;
+    release(&(binding->lock));
+    return payload_len;
 }
 
 // This code is lifted from FreeBSD's ping.c, and is copyright by the Regents
@@ -179,19 +269,42 @@ sys_send(void)
   return 0;
 }
 
-void
-ip_rx(char *buf, int len)
+void ip_rx(char* buf, int len)
 {
-  // don't delete this printf; make grade depends on it.
-  static int seen_ip = 0;
-  if(seen_ip == 0)
-    printf("ip_rx: received an IP packet\n");
-  seen_ip = 1;
+    // don't delete this printf; make grade depends on it.
+    static int seen_ip = 0;
+    if (seen_ip == 0)
+        printf("ip_rx: received an IP packet\n");
+    seen_ip = 1;
 
-  //
-  // Your code here.
-  //
-  
+    //
+    // Your code here.
+    //
+
+    struct ip* ip = (struct ip*)(buf + sizeof(struct eth));
+    struct udp* udp = (struct udp*)((char*)ip + sizeof(struct ip));
+    if (ip->ip_p != IPPROTO_UDP) {
+        kfree(buf);
+        return;
+    }
+    uint16 dport = ntohs(udp->dport);
+    for (int i = 0; i < MAX_BINDINGS; i++) {
+        acquire(&(bindings[i].lock));
+        if (bindings[i].is_bound && bindings[i].port == dport) {
+            if ((bindings[i].tail + 1) % 16 == bindings[i].head) {
+                release(&(bindings[i].lock));
+                kfree(buf);
+                return;
+            }
+            bindings[i].queue[bindings[i].tail] = buf;
+            bindings[i].tail = (bindings[i].tail + 1) % 16;
+            wakeup(&(bindings[i]));
+            release(&(bindings[i].lock));
+            return;
+        }
+        release(&(bindings[i].lock));
+    }
+    kfree(buf);
 }
 
 //
